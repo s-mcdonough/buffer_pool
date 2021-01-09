@@ -12,26 +12,29 @@ class buffer_pool
     struct mover
     {
         mover() = delete;
-        mover(bp_type* p_buffer_pool) {}
+        mover(bp_type* p_buffer_pool) : _p_buffer_pool(p_buffer_pool) {}
 
         void operator()(T* p) const
         {
             // We aren't deleting the object, just moving it
-            _p_buffer_pool->return_to_buffer(p);
+            _p_buffer_pool->manage(p);
         }
 
         bp_type* _p_buffer_pool;
     };
-
-    void return_to_buffer(T* object) { _queue.push_back(internal_pointer_type(object)); }
 
 public:
     using value_type = T;
     using pointer_type = std::unique_ptr<T, mover>;
     using size_type = std::size_t;
 
-    pointer_type get() { return pointer_type(_queue.pop_front().release()); }
-
+    pointer_type get() 
+    { 
+        auto ptr = pointer_type(_queue.front().release(), mover(this));
+        _queue.pop_front();
+        return ptr;
+    }
+    void manage(T* object) { _queue.push_back(internal_pointer_type(object)); }
 
     size_type capacity() const noexcept { return _queue.max_size(); }
     size_type size() const noexcept { return _queue.size(); }
