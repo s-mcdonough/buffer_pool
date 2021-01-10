@@ -5,7 +5,8 @@
 #include <mutex>
 
 /**
- * @brief A 
+ * @brief A non-blocking 
+ * 
  * 
  * @tparam T underlying type to manage
  */
@@ -71,6 +72,7 @@ public:
      */
     pointer_type get() 
     { 
+        // TODO: Currently, there is UB if size() == 0. 
         std::lock_guard lk(_mutex);
         auto* raw_ptr = _queue.front().release();
         auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
