@@ -1,10 +1,12 @@
 #include <catch2/catch.hpp>
 #include <buffer_pool/buffer_pool.h>
-#include <algorithm>
+#include <buffer_pool/shared_ptr_adapter.h>
 
-TEST_CASE("push/pop of an element", "[buffer_pool]")
+TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation][lifecycle]",
+  ((typename T, template<typename, typename> class Ptr), T, Ptr), (int,std::unique_ptr), (int, shared_ptr_adapter)) 
 {
-    buffer_pool<int> bp;
+    buffer_pool<T, Ptr> bp;
+
     REQUIRE(bp.size() == 0);
     REQUIRE(bp.empty() == true);
 
@@ -35,7 +37,7 @@ TEST_CASE("push/pop of an element", "[buffer_pool]")
     SECTION("In place construct an element with the pool")
     {
         const int approx_pi = 3;
-        bp.emplace_manage(approx_pi);
+        bp.template emplace_manage<int>(approx_pi);
 
         // Size should be increased
         REQUIRE(bp.size() == 1);
@@ -55,38 +57,44 @@ TEST_CASE("push/pop of an element", "[buffer_pool]")
         REQUIRE(bp.size() == 1);
         REQUIRE(bp.empty() == false);
     }
-}
+} 
 
-TEST_CASE("size operators", "[buffer_pool]")
+TEMPLATE_TEST_CASE_SIG("queue properties query", "[properties]",
+  ((typename T, template<typename, typename> class Ptr), T, Ptr), (double,std::unique_ptr), (double, shared_ptr_adapter))
 {
-    buffer_pool<double> bp;
+    buffer_pool<T, Ptr> bp;
     const int num_items = 50;
     for(auto i=0; i<num_items; ++i)
     {
-        bp.emplace_manage(3.14159);
+        bp.template emplace_manage<double>(3.14159);
         REQUIRE(bp.size() == i+1);
         REQUIRE(bp.capacity() >= i+1);
         REQUIRE(bp.empty() == false);
     }
 }
 
-TEST_CASE("hostile user", "[buffer_pool]")
+TEMPLATE_TEST_CASE_SIG("a hostile user", "[lifecycle]",
+  ((typename T, template<typename, typename> class Ptr), T, Ptr), (int,std::unique_ptr), (int, shared_ptr_adapter)) 
 {
-    buffer_pool<int> bp;
-    bp.emplace_manage(1);
-    bp.emplace_manage(2);
+    buffer_pool<T, Ptr> bp;
+    bp.template emplace_manage<int>(1);
+    bp.template emplace_manage<int>(2);
     REQUIRE(bp.size() == 2);
 
-    SECTION("releases the pointer")
+    // Only unique_ptr has the release method
+    if constexpr (std::is_same_v<Ptr<T,std::default_delete<T>>, std::unique_ptr<T>>)
     {
+        SECTION("releases the pointer")
         {
-            auto ptr = bp.get();
-            REQUIRE(bp.size() == 1);
-            auto* rp = ptr.release();
-            delete rp;
+            {
+                auto ptr = bp.get();
+                REQUIRE(bp.size() == 1);
+                auto* rp = ptr.release();
+                delete rp;
+            }
+            // It is not inserted back into the pool
+            CHECK(bp.size() == 1);
         }
-        // It is not inserted back into the pool
-        CHECK(bp.size() == 1);
     }
 
     SECTION("resets the pointer")

@@ -3,18 +3,14 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <type_traits>
 
-/**
- * @brief A non-blocking 
- * 
- * 
- * @tparam T underlying type to manage
- */
-template<typename T>
+#include "buffer_pool/shared_ptr_adapter.h"
+
+template<typename T, template<typename, typename> class Ptr = std::unique_ptr>
 class buffer_pool
 {
-    using bp_type = buffer_pool<T>;
-    using internal_pointer_type = std::unique_ptr<T>;
+    using internal_pointer_type = Ptr<T, std::default_delete<T>>;
 
     /**
      * @brief Moves the object back into the buffer pool once it goes out of scope.
@@ -24,7 +20,7 @@ class buffer_pool
     struct mover
     {
         mover() = delete;
-        mover(bp_type* p_buffer_pool, T* ptr) 
+        mover(buffer_pool* p_buffer_pool, T* ptr) 
             : _p_buffer_pool(p_buffer_pool)
             , _ptr(ptr) {}
 
@@ -48,13 +44,13 @@ class buffer_pool
             }
         }
 
-        bp_type* _p_buffer_pool;
+        buffer_pool* _p_buffer_pool;
         T* _ptr;
     };
 
 public:
     using value_type = T;
-    using pointer_type = std::unique_ptr<T, mover>;
+    using pointer_type = Ptr<T, mover>;
     using size_type = std::size_t;
 
     buffer_pool() = default;
@@ -91,11 +87,24 @@ public:
         _queue.push_back(internal_pointer_type(object)); 
     }
 
-    template<class... Args>
-    void emplace_manage(Args&&... args)
+    template<class U, class... Args>
+    typename std::enable_if_t<std::is_same_v<internal_pointer_type, 
+        std::unique_ptr<U>>, void>
+    emplace_manage(Args&&... args)
     {
         std::lock_guard lk(_mutex);
-        _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
+        _queue.emplace_back(std::make_unique<U>(std::forward<Args>(args)...));
+    }
+
+    template<class U, class... Args>
+    typename std::enable_if_t<
+                 std::is_same_v<internal_pointer_type, 
+                                shared_ptr_adapter<U, std::default_delete<U>>>,
+                 void>
+    emplace_manage(Args&&... args)
+    {
+        std::lock_guard lk(_mutex);
+        _queue.emplace_back(std::make_shared<U>(std::forward<Args>(args)...));
     }
 
     size_type capacity() const noexcept { return _queue.max_size(); }
