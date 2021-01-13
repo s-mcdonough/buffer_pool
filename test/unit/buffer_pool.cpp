@@ -39,7 +39,7 @@ TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation]
     SECTION("In place construct an element with the pool")
     {
         const int approx_pi = 3;
-        bp.template emplace_manage<int>(approx_pi);
+        bp.emplace_manage(approx_pi);
 
         // Size should be increased
         REQUIRE(bp.size() == 1);
@@ -80,8 +80,8 @@ TEMPLATE_TEST_CASE_SIG("a hostile user", "[lifecycle]",
   (int, memory_policy::Unique), (int, memory_policy::Shared)) 
 {
     pool<T, Ptr> bp;
-    bp.template emplace_manage<int>(1);
-    bp.template emplace_manage<int>(2);
+    bp.emplace_manage(1);
+    bp.emplace_manage(2);
     REQUIRE(bp.size() == 2);
 
     // Only unique_ptr has the release method

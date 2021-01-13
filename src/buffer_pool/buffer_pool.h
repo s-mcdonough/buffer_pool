@@ -93,25 +93,11 @@ public:
         _queue.push_back(internal_pointer_type(object)); 
     }
 
-    template<class U, class... Args>
-    typename std::enable_if_t<std::is_same_v<internal_pointer_type, 
-        memory_policy::Unique<U, std::default_delete<T>>>, void>
-    emplace_manage(Args&&... args)
+    template<class... Args>
+    void emplace_manage(Args&&... args)
     {
         std::lock_guard lk(_mutex);
-        _queue.emplace_back(std::make_unique<U>(std::forward<Args>(args)...));
-    }
-
-    // TODO: Convert to policy based inplementation to remove SFINAE
-    template<class U, class... Args>
-    typename std::enable_if_t<
-                 std::is_same_v<internal_pointer_type, 
-                                memory_policy::Shared<U, std::default_delete<U>>>,
-                 void>
-    emplace_manage(Args&&... args)
-    {
-        std::lock_guard lk(_mutex);
-        _queue.emplace_back(std::make_shared<U>(std::forward<Args>(args)...)); // Static policy factory?
+        _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
     }
 
     size_type capacity() const noexcept { return _queue.max_size(); }
