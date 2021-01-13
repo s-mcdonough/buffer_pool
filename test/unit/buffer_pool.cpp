@@ -1,6 +1,5 @@
 #include <catch2/catch.hpp>
-#include <buffer_pool/buffer_pool.h>
-// #include <buffer_pool/shared_ptr_adapter.h>
+#include <buffer_pool/pool.h>
 
 using namespace buffer_pool;
 
