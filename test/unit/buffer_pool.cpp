@@ -1,11 +1,13 @@
 #include <catch2/catch.hpp>
 #include <buffer_pool/buffer_pool.h>
-#include <buffer_pool/shared_ptr_adapter.h>
+// #include <buffer_pool/shared_ptr_adapter.h>
+
+using namespace buffer_pool;
 
 TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation][lifecycle]",
-  ((typename T, template<typename, typename> class Ptr), T, Ptr), (int,std::unique_ptr), (int, shared_ptr_adapter)) 
+  ((typename T, template<typename, class> class Ptr), T, Ptr), (int,memory_policy::Unique), (int,memory_policy::Shared)) 
 {
-    buffer_pool<T, Ptr> bp;
+    pool<T, Ptr> bp;
 
     REQUIRE(bp.size() == 0);
     REQUIRE(bp.empty() == true);
@@ -60,9 +62,9 @@ TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation]
 } 
 
 TEMPLATE_TEST_CASE_SIG("queue properties query", "[properties]",
-  ((typename T, template<typename, typename> class Ptr), T, Ptr), (double,std::unique_ptr), (double, shared_ptr_adapter))
+  ((typename T, template<typename, typename> class Ptr), T, Ptr), (double,memory_policy::Unique), (double,memory_policy::Shared))
 {
-    buffer_pool<T, Ptr> bp;
+    pool<T, Ptr> bp;
     const int num_items = 50;
     for(auto i=0; i<num_items; ++i)
     {
@@ -74,9 +76,10 @@ TEMPLATE_TEST_CASE_SIG("queue properties query", "[properties]",
 }
 
 TEMPLATE_TEST_CASE_SIG("a hostile user", "[lifecycle]",
-  ((typename T, template<typename, typename> class Ptr), T, Ptr), (int,std::unique_ptr), (int, shared_ptr_adapter)) 
+  ((typename T, template<typename, typename> class Ptr), T, Ptr), 
+  (int, memory_policy::Unique), (int, memory_policy::Shared)) 
 {
-    buffer_pool<T, Ptr> bp;
+    pool<T, Ptr> bp;
     bp.template emplace_manage<int>(1);
     bp.template emplace_manage<int>(2);
     REQUIRE(bp.size() == 2);

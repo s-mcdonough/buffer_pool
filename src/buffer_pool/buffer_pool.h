@@ -5,12 +5,16 @@
 #include <mutex>
 #include <type_traits>
 
-#include "buffer_pool/shared_ptr_adapter.h"
+#include "buffer_pool/memory_policy/shared.h"
+#include "buffer_pool/memory_policy/unique.h"
 
-template<typename T, template<typename, typename> class Ptr = std::unique_ptr>
-class buffer_pool
+namespace buffer_pool
 {
-    using internal_pointer_type = Ptr<T, std::default_delete<T>>;
+
+template<typename T, template<typename, class> class MemoryPolicy = memory_policy::Unique>
+class pool
+{
+    using internal_pointer_type = std::unique_ptr<T, std::default_delete<T>>;
 
     /**
      * @brief Moves the object back into the buffer pool once it goes out of scope.
@@ -20,7 +24,7 @@ class buffer_pool
     struct mover
     {
         mover() = delete;
-        mover(buffer_pool* p_buffer_pool, T* ptr) 
+        mover(pool* p_buffer_pool, T* ptr) 
             : _p_buffer_pool(p_buffer_pool)
             , _ptr(ptr) {}
 
@@ -44,19 +48,20 @@ class buffer_pool
             }
         }
 
-        buffer_pool* _p_buffer_pool;
+    private:
+        pool* _p_buffer_pool;
         T* _ptr;
     };
 
 public:
     using value_type = T;
-    using pointer_type = Ptr<T, mover>;
+    using pointer_type = MemoryPolicy<T, mover>;
     using size_type = std::size_t;
 
-    buffer_pool() = default;
-    ~buffer_pool() = default;
-    buffer_pool(const buffer_pool&) = delete;
-    buffer_pool& operator= (const buffer_pool&) = delete;
+    pool() = default;
+    ~pool() = default;
+    pool(const pool&) = delete;
+    pool& operator= (const pool&) = delete;
 
     /**
      * @brief Gets an buffer from the pool.
@@ -70,9 +75,10 @@ public:
     { 
         // TODO: Currently, there is UB if size() == 0. 
         std::lock_guard lk(_mutex);
-        auto* raw_ptr = _queue.front().release();
-        auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
+        auto internal_ptr = std::move(_queue.front());
+        auto* raw_ptr = internal_ptr.release();
         _queue.pop_front();
+        auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
         return ptr;
     }
 
@@ -89,22 +95,23 @@ public:
 
     template<class U, class... Args>
     typename std::enable_if_t<std::is_same_v<internal_pointer_type, 
-        std::unique_ptr<U>>, void>
+        memory_policy::Unique<U, std::default_delete<T>>>, void>
     emplace_manage(Args&&... args)
     {
         std::lock_guard lk(_mutex);
         _queue.emplace_back(std::make_unique<U>(std::forward<Args>(args)...));
     }
 
+    // TODO: Convert to policy based inplementation to remove SFINAE
     template<class U, class... Args>
     typename std::enable_if_t<
                  std::is_same_v<internal_pointer_type, 
-                                shared_ptr_adapter<U, std::default_delete<U>>>,
+                                memory_policy::Shared<U, std::default_delete<U>>>,
                  void>
     emplace_manage(Args&&... args)
     {
         std::lock_guard lk(_mutex);
-        _queue.emplace_back(std::make_shared<U>(std::forward<Args>(args)...));
+        _queue.emplace_back(std::make_shared<U>(std::forward<Args>(args)...)); // Static policy factory?
     }
 
     size_type capacity() const noexcept { return _queue.max_size(); }
@@ -115,3 +122,5 @@ private:
     std::deque<internal_pointer_type> _queue;
     std::mutex _mutex;
 };
+
+} // namespace buffer_pool
