@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -62,8 +63,9 @@ class pool
 
     void return_to_pool(T* object)
     {
-        std::lock_guard lk(_mutex);
+        std::unique_lock lk(_mutex);
         _queue.push_back(internal_pointer_type(object));
+        _cv.notify_one();
     }
 
 public:
@@ -97,8 +99,14 @@ public:
      */
     pointer_type get() 
     { 
-        // TODO: Currently, there is UB if size() == 0. 
-        std::lock_guard lk(_mutex);
+        std::unique_lock lk(_mutex);
+
+        // Prevent UB where poping off an empty queue
+        if (size() == 0)
+        {
+            _cv.wait(lk, [&](){ return this->size() > 0; });
+        } 
+        
         auto* raw_ptr = _queue.front().release();
         _queue.pop_front();
         auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
@@ -131,6 +139,7 @@ public:
     [[nodiscard]] bool empty() const noexcept { return _queue.size() == 0; }
 
 private:
+    std::condition_variable _cv;
     std::deque<internal_pointer_type> _queue;
     std::mutex _mutex;
     std::atomic_size_t _total_managed;
