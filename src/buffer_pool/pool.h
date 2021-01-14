@@ -7,6 +7,7 @@
 #include <mutex>
 #include <type_traits>
 
+#include "buffer_pool/memory_policy/checker.h"
 #include "buffer_pool/memory_policy/unique.h"
 
 namespace buffer_pool
@@ -21,6 +22,8 @@ namespace buffer_pool
 template<typename T, template<typename, class> class MemoryPolicy = memory_policy::Unique>
 class pool
 {
+    BUFFER_POOL_MEMORY_POLICY_CHECK(T, MemoryPolicy, "Invalid pool memory policy");
+
     using internal_pointer_type = std::unique_ptr<T>;
 
     /**

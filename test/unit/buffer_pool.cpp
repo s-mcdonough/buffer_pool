@@ -4,6 +4,14 @@
 
 using namespace buffer_pool;
 
+template<typename, class>
+class FooPolicy {};
+
+TEST_CASE("Uncomment to test pool traits", "[!hide]")
+{
+    // pool<int, FooPolicy> wont_compile;
+}
+
 TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation][lifecycle]",
   ((typename T, template<typename, class> class Ptr), T, Ptr), (int,memory_policy::Unique), (int,memory_policy::Shared)) 
 {
