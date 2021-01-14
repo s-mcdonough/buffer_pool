@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -11,10 +12,16 @@
 namespace buffer_pool
 {
 
+/**
+ * @brief 
+ * 
+ * @tparam T underlying type to manage
+ * @tparam MemoryPolicy 
+ */
 template<typename T, template<typename, class> class MemoryPolicy = memory_policy::Unique>
 class pool
 {
-    using internal_pointer_type = std::unique_ptr<T, std::default_delete<T>>;
+    using internal_pointer_type = std::unique_ptr<T>;
 
     /**
      * @brief Moves the object back into the buffer pool once it goes out of scope.
@@ -37,7 +44,7 @@ class pool
                 if (p == _ptr)
                 {
                     // If it matches, we aren't deleting the object, but putting it back in the queue
-                    _p_buffer_pool->manage(p);
+                    _p_buffer_pool->return_to_pool(p);
                 }
                 else
                 {
@@ -53,12 +60,29 @@ class pool
         T* _ptr;
     };
 
+    void return_to_pool(T* object)
+    {
+        std::lock_guard lk(_mutex);
+        _queue.push_back(internal_pointer_type(object));
+    }
+
 public:
-    using value_type = T;
+    using element_type = T;
     using pointer_type = MemoryPolicy<T, mover>;
     using size_type = std::size_t;
 
-    pool() = default;
+    pool() 
+        : _queue()
+        , _mutex()
+        , _total_managed(0)
+    {}
+
+    pool(std::initializer_list<internal_pointer_type> init)
+        : _queue(init)
+        , _mutex()
+        , _total_managed(init.size())
+    {}
+
     ~pool() = default;
     pool(const pool&) = delete;
     pool& operator= (const pool&) = delete;
@@ -75,22 +99,22 @@ public:
     { 
         // TODO: Currently, there is UB if size() == 0. 
         std::lock_guard lk(_mutex);
-        auto internal_ptr = std::move(_queue.front());
-        auto* raw_ptr = internal_ptr.release();
+        auto* raw_ptr = _queue.front().release();
         _queue.pop_front();
         auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
         return ptr;
     }
 
     /**
-     * @brief 
+     * @brief Bring an object under management of the pool
      * 
      * @param object 
      */
     void manage(T* object) 
     { 
-        std::lock_guard lk(_mutex);
-        _queue.push_back(internal_pointer_type(object)); 
+        return_to_pool(object); 
+        // TODO: Check to make sure the object isnt already managed
+        ++_total_managed;
     }
 
     template<class... Args>
@@ -98,15 +122,18 @@ public:
     {
         std::lock_guard lk(_mutex);
         _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
+        ++_total_managed;
     }
 
-    size_type capacity() const noexcept { return _queue.max_size(); }
-    size_type size() const noexcept { return _queue.size(); }
-    bool empty() const noexcept { return _queue.size() == 0; }
+    [[nodiscard]] size_type capacity() const noexcept { return _queue.max_size(); }
+    [[nodiscard]] size_type num_managed_buffers() const noexcept { return _total_managed; }
+    [[nodiscard]] size_type size() const noexcept { return _queue.size(); }
+    [[nodiscard]] bool empty() const noexcept { return _queue.size() == 0; }
 
 private:
     std::deque<internal_pointer_type> _queue;
     std::mutex _mutex;
+    std::atomic_size_t _total_managed;
 };
 
 } // namespace buffer_pool
