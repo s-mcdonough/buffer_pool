@@ -1,5 +1,6 @@
 #include <catch2/catch.hpp>
 #include <buffer_pool/pool.h>
+#include <buffer_pool/memory_policy/shared.h>
 
 using namespace buffer_pool;
 

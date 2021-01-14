@@ -7,7 +7,6 @@
 #include <mutex>
 #include <type_traits>
 
-#include "buffer_pool/memory_policy/shared.h"
 #include "buffer_pool/memory_policy/unique.h"
 
 namespace buffer_pool
@@ -90,7 +89,7 @@ public:
     pool& operator= (const pool&) = delete;
 
     /**
-     * @brief Gets an buffer from the pool.
+     * @brief Gets a buffer from the pool. Blocking.
      * 
      * This decreases the number of available objets gettable from the pool. 
      * 
@@ -111,6 +110,26 @@ public:
         _queue.pop_front();
         auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
         return ptr;
+    }
+
+    /**
+     * @brief Attempts to get a buffer from the pool, returns 
+     * nullptr if there is none. Non-blocking.
+     * 
+     * @return pointer_type 
+     */
+    pointer_type try_get() 
+    {
+        std::unique_lock lk(_mutex);
+        if (size() > 0)
+        {
+            auto* raw_ptr = _queue.front().release();
+            _queue.pop_front();
+            auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
+            return ptr;
+        }
+        
+        return pointer_type(nullptr, mover(this, nullptr));
     }
 
     /**
