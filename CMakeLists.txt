@@ -7,5 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 include(FetchContent)
 
+enable_testing()
+
 add_subdirectory(src)
 add_subdirectory(test/unit)
