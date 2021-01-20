@@ -67,6 +67,7 @@ class pool
     {
         std::unique_lock lk(_mutex);
         _queue.push_back(internal_pointer_type(object));
+        lk.unlock();
         _cv.notify_one();
     }
 
@@ -80,6 +81,17 @@ public:
         , _mutex()
         , _total_managed(0)
     {}
+
+    pool(std::initializer_list<T> init)
+        : _queue()
+        , _mutex()
+        , _total_managed(0)
+    {
+        for (auto& i : init)
+        {
+            emplace_manage(i);
+        }
+    }
 
     pool(std::initializer_list<internal_pointer_type> init)
         : _queue(init)
@@ -150,14 +162,16 @@ public:
     template<class... Args>
     void emplace_manage(Args&&... args)
     {
-        std::lock_guard lk(_mutex);
+        std::unique_lock lk(_mutex);
         _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
         ++_total_managed;
+        lk.unlock();
+        _cv.notify_one();
     }
 
-    [[nodiscard]] size_type capacity() const noexcept { return _queue.max_size(); }
-    [[nodiscard]] size_type num_managed_buffers() const noexcept { return _total_managed; }
-    [[nodiscard]] size_type size() const noexcept { return _queue.size(); }
+    size_type capacity() const noexcept { return _queue.max_size(); }
+    size_type num_managed_buffers() const noexcept { return _total_managed; }
+    size_type size() const noexcept { return _queue.size(); }
     [[nodiscard]] bool empty() const noexcept { return _queue.size() == 0; }
 
 private:
