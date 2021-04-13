@@ -17,6 +17,7 @@ TEST_CASE("Uncomment to test pool traits", "[!hide]")
     // pool<int, FooPolicy> wont_compile;
 }
 
+// Test types
 struct A {}; // Trivially destructable
 struct B { ~B(){} };
 struct C : A, B { ~C(){} };
@@ -34,18 +35,39 @@ struct TestBase
 {
     static std::atomic_size_t base_count;
     TestBase() { ++base_count; }
-    virtual ~TestBase() { --base_count; }
+    virtual ~TestBase() { --base_count; } // If base is not virtual the next test will fail. 
+                                          // See if there is a way this can be tested at compile 
+                                          // time.
 };
 
-struct TestDerived
+struct TestDerived : public TestBase
 {
     static std::atomic_size_t derived_count;
     TestDerived() { ++derived_count; }
     ~TestDerived() { --derived_count; }
 };
 
-std::atomic_size_t TestBase::base_count(0);
+std::atomic_size_t TestBase::base_count(3);
 std::atomic_size_t TestDerived::derived_count(0);
+
+TEMPLATE_TEST_CASE_SIG("Test proper destruction of virtual classes", "[destruction][lifecycle]",
+  ((typename T, template<typename, class> class Ptr), T, Ptr), (TestBase, memory_policy::Unique), (TestBase, memory_policy::Shared)) 
+{
+    auto num_instances_base = TestBase::base_count.load();
+    auto num_instances_derived = TestDerived::derived_count.load();
+
+    // Construct a pool, and add a derived to it
+    {
+        pool<T, Ptr> bp;
+        auto* pDerived = new TestDerived();
+        CHECK(TestBase::base_count       == ++num_instances_base);
+        CHECK(TestDerived::derived_count == ++num_instances_derived);
+        bp.manage(pDerived);
+    } // Derived should be deleted by now, as the buffer pool is out of scope
+    
+    CHECK(TestBase::base_count.load()       == --num_instances_base);
+    CHECK(TestDerived::derived_count.load() == --num_instances_derived);
+}
 
 TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation][lifecycle]",
   ((typename T, template<typename, class> class Ptr), T, Ptr), (int,memory_policy::Unique), (int,memory_policy::Shared)) 
