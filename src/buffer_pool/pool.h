@@ -1,6 +1,24 @@
+// Copyright (c) 2021 Sean McDonough
+//
+// This file is part of BufferPool.
+//
+// BufferPool is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// BufferPool is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with BufferPool.  If not, see <https://www.gnu.org/licenses/>.
+
 #pragma once
 
 #include <atomic>
+#include <algorithm>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -41,10 +59,10 @@ class pool
         void operator()(T* p) const
         {
             // Handle the case where the underlying pointer has been released
-            if (p)
+            if (p) 
             {
                 // Handle the case where the initial pointer has been replaced
-                if (p == _ptr)
+                if (p == _ptr) 
                 {
                     // If it matches, we aren't deleting the object, but putting it back in the queue
                     _p_buffer_pool->return_to_pool(p);
@@ -52,22 +70,23 @@ class pool
                 else
                 {
                     // Otherwise, free the pointer
-                    delete p;
+                    delete p; // TODO: Handle the case where T has been allocated with new[], via template specalization (see unique_ptr for more detail).
                 }
                 
             }
         }
 
     private:
-        pool* _p_buffer_pool;
-        T* _ptr;
+        pool* const _p_buffer_pool;
+        const T* const _ptr;
     };
 
     void return_to_pool(T* object)
     {
-        std::unique_lock lk(_mutex);
-        _queue.push_back(internal_pointer_type(object));
-        lk.unlock();
+        {
+            std::lock_guard lk(_mutex);
+            _queue.push_back(internal_pointer_type(object));
+        } // unlock the mutex
         _cv.notify_one();
     }
 
@@ -135,42 +154,60 @@ public:
      */
     pointer_type try_get() 
     {
-        std::unique_lock lk(_mutex);
-        if (size() > 0)
         {
-            auto* raw_ptr = _queue.front().release();
-            _queue.pop_front();
-            auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
-            return ptr;
+            std::lock_guard lk(_mutex);
+            if (_queue.size() > 0)
+            {
+                auto* raw_ptr = _queue.front().release();
+                _queue.pop_front();
+                auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
+                return ptr;
+            }
         }
         
         return pointer_type(nullptr, mover(this, nullptr));
     }
 
     /**
-     * @brief Bring an object under management of the pool
+     * @brief Bring an object under management of the pool.
      * 
-     * @param object 
+     * @param object Pointer to the object to manage.
+     * @return False if the object is already managed by the pool, true otherwise.
      */
-    void manage(T* object) 
-    { 
-        return_to_pool(object); 
-        // TODO: Check to make sure the object isnt already managed
-        ++_total_managed;
+    bool manage(T* object) 
+    {
+        const bool unique = std::none_of(_queue.begin(), _queue.end(), [object](const internal_pointer_type& p)->bool
+            { 
+                return p.get() == object;
+            });
+
+        if (unique)
+        {
+            return_to_pool(object);
+            ++_total_managed;
+        }
+
+        return unique;        
     }
 
     template<class... Args>
     void emplace_manage(Args&&... args)
     {
-        std::unique_lock lk(_mutex);
-        _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
-        ++_total_managed;
-        lk.unlock();
+        {
+            std::unique_lock lk(_mutex);
+            _queue.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
+            ++_total_managed;
+        } // unlocks the mutex
         _cv.notify_one();
     }
 
+    /**
+     * @brief Capacity of the underlying container
+     * 
+     * @return size_type 
+     */
     size_type capacity() const noexcept { return _queue.max_size(); }
-    size_type num_managed_buffers() const noexcept { return _total_managed; }
+    size_type num_managed() const noexcept { return _total_managed; }
     size_type size() const noexcept { return _queue.size(); }
     [[nodiscard]] bool empty() const noexcept { return _queue.size() == 0; }
 

@@ -2,6 +2,9 @@
 #include <buffer_pool/pool.h>
 #include <buffer_pool/memory_policy/shared.h>
 
+#include <atomic>
+#include <thread>
+
 using namespace buffer_pool;
 
 template<typename, class>
@@ -42,6 +45,18 @@ TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation]
         // Size should be increased
         REQUIRE(bp.size() == 1);
         REQUIRE(bp.empty() == false);
+    }
+
+    SECTION("Try re-registering an element with the pool")
+    {
+        const auto prev_nmanaged = bp.num_managed();
+        auto* const pv = new int(42);
+        CHECK(bp.manage(pv) == true);
+        CHECK(bp.num_managed() == (prev_nmanaged + 1));
+
+        // Try re-adding, this should fail
+        CHECK(bp.manage(pv) == false);
+        CHECK(bp.num_managed() == (prev_nmanaged + 1));
     }
 
     SECTION("In place construct an element with the pool")
@@ -121,8 +136,29 @@ TEMPLATE_TEST_CASE_SIG("a hostile user", "[lifecycle]",
 
     SECTION("swaps the pointer")
     {
-        // TODO: Investigate, as I do not think it is possibe to swap the 
+        // TODO: Investigate. It does not seem possibe to swap the 
         // smart pointer as the deleter is private to the buffer_pool.
         // Investigate...
+        // auto ptr = bp.get();
+        // auto other = std::make_shared<T>(0);
+        // std::swap(ptr, other);
     }
+}
+
+TEST_CASE("Blocking functionality", "[thread]")
+{
+    pool<int> bp{1,3,5,6};
+    const auto sz = bp.size();
+    std::atomic_int ctr(0);
+
+    auto popper = [&]() -> void {
+        auto p = bp.get();
+        INFO("Number of elements" << bp.size());
+    };
+
+    std::thread prunner(popper);
+
+    // CHECK()
+
+    prunner.join();
 }
