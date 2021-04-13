@@ -41,6 +41,9 @@ template<typename T, template<typename, class> class MemoryPolicy = memory_polic
 class pool
 {
     BUFFER_POOL_MEMORY_POLICY_CHECK(T, MemoryPolicy, "Invalid pool memory policy");
+    static_assert((!std::is_polymorphic_v<T> || std::has_virtual_destructor_v<T>) && 
+                  std::is_destructible_v<T>
+                  ,"T must be safely destructable!");
 
     using internal_pointer_type = std::unique_ptr<T>;
 

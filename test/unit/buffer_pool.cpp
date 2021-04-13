@@ -5,6 +5,8 @@
 #include <atomic>
 #include <thread>
 
+#include <type_traits>
+
 using namespace buffer_pool;
 
 template<typename, class>
@@ -14,6 +16,36 @@ TEST_CASE("Uncomment to test pool traits", "[!hide]")
 {
     // pool<int, FooPolicy> wont_compile;
 }
+
+struct A {}; // Trivially destructable
+struct B { ~B(){} };
+struct C : A, B { ~C(){} };
+class  D { ~D(){} };
+
+TEST_CASE("Uncomment to test destructor saftey static asserts", "[!hide]")
+{
+    pool<A> will_compile_1; // Trivially destructable
+    pool<B> will_compile_2;
+    // pool<C> wont_compile_1; // TODO: This will compile rn, determine if this is valid
+    // pool<D> wont_compile_2; // as D's dtor is private
+}
+
+struct TestBase
+{
+    static std::atomic_size_t base_count;
+    TestBase() { ++base_count; }
+    virtual ~TestBase() { --base_count; }
+};
+
+struct TestDerived
+{
+    static std::atomic_size_t derived_count;
+    TestDerived() { ++derived_count; }
+    ~TestDerived() { --derived_count; }
+};
+
+std::atomic_size_t TestBase::base_count(0);
+std::atomic_size_t TestDerived::derived_count(0);
 
 TEMPLATE_TEST_CASE_SIG("Test constuction of buffer and retrieval", "[allocation][lifecycle]",
   ((typename T, template<typename, class> class Ptr), T, Ptr), (int,memory_policy::Unique), (int,memory_policy::Shared)) 
