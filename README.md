@@ -1,4 +1,4 @@
 # BufferPool
-A lightweight, arbitrary, modern c++ pool manager.
+A lightweight, arbitrary, modern c++ memory pool manager.
 
 *Under active development*
