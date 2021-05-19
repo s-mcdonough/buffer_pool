@@ -32,10 +32,13 @@ namespace buffer_pool
 {
 
 /**
- * @brief 
+ * @brief A lightweith pool object manager. 
  * 
- * @tparam T underlying type to manage
- * @tparam MemoryPolicy 
+ * @tparam T underlying type to manage in the pool.
+ * @tparam MemoryPolicy policy which controls the wrapper type,
+ * either Unique or Shared. Unique maps to unique_ptr<T> (i.e. only 
+ * one instance, use moves, etc.) and Shared maps to shated_ptr<T> 
+ * (i.e. reference counted, slightly heavierweight). 
  */
 template<typename T, template<typename, class> class MemoryPolicy = memory_policy::Unique>
 class pool
