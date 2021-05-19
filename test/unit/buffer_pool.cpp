@@ -19,16 +19,16 @@ TEST_CASE("Uncomment to test pool traits", "[!hide]")
 
 // Test types
 struct A {}; // Trivially destructable
-struct B { ~B(){} };
-struct C : A, B { ~C(){} };
+class  B { ~B() = default; };
+struct C : A, public virtual B { };
 class  D { ~D(){} };
 
 TEST_CASE("Uncomment to test destructor saftey static asserts", "[!hide]")
 {
     pool<A> will_compile_1; // Trivially destructable
-    pool<B> will_compile_2;
-    // pool<C> wont_compile_1; // TODO: This will compile rn, determine if this is valid
-    // pool<D> wont_compile_2; // as D's dtor is private
+    // pool<B> wont_compile_1; // as B's dtor is private
+    // pool<C> wont_compile_2; // as B's dtor is private
+    // pool<D> wont_compile_3; // as D's dtor is private
 }
 
 struct TestBase
