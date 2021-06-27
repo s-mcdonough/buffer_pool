@@ -107,6 +107,16 @@ public:
         , _total_managed(0)
     {}
 
+    /**
+     * @brief Construct a new pool object with contents of an initalizer list.
+     * 
+     * This contructor only exists if the managed type T is copy assignable.
+     * 
+     * 
+     * @tparam metaprogramming argument, ignore.  
+     * @param init 
+     */
+    template<typename=std::enable_if_t<std::is_copy_assignable_v<T>>>
     pool(std::initializer_list<T> init)
         : _queue()
         , _mutex()
@@ -125,6 +135,9 @@ public:
     {}
 
     ~pool() = default;
+
+    // Assignment operators are deleted as it would blow
+    // up the mover-deleter object paradigm.
     pool(const pool&) = delete;
     pool& operator= (const pool&) = delete;
 
@@ -140,8 +153,10 @@ public:
     { 
         std::unique_lock lk(_mutex);
 
+        #define unlikely(x)     __builtin_expect((x),0)
+
         // Prevent UB where poping off an empty queue
-        if (size() == 0)
+        if (unlikely(size() == 0))
         {
             _cv.wait(lk, [&](){ return this->size() > 0; });
         } 
@@ -166,7 +181,7 @@ public:
             {
                 auto* raw_ptr = _queue.front().release();
                 _queue.pop_front();
-                auto ptr = pointer_type(raw_ptr, mover(this, raw_ptr));
+                auto ptr = pointer_type(std::move(raw_ptr), mover(this, raw_ptr));
                 return ptr;
             }
         }
@@ -182,6 +197,8 @@ public:
      */
     bool manage(T* object) 
     {
+        if (!object) return false;
+
         const bool unique = std::none_of(_queue.begin(), _queue.end(), [object](const internal_pointer_type& p)->bool
             { 
                 return p.get() == object;
@@ -194,6 +211,14 @@ public:
         }
 
         return unique;        
+    }
+
+    bool manage(std::unique_ptr<T>&& ptr) 
+    {        
+        if (!ptr) return false;
+        return_to_pool(ptr.release());
+        ++_total_managed;
+        return true;
     }
 
     template<class... Args>
